@@ -1,5 +1,7 @@
-Flask==2.3.2
 fastapi
-uvicorn
+uvicorn[standard]
+gunicorn
 pymongo
+Flask==2.3.2
 python-dotenv
+

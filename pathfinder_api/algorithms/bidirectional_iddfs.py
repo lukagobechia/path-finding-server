@@ -234,7 +234,7 @@ class BidirectionalIDDFSAlgorithm:
         result = {
             "path": self.path,
             "path_length": len(self.path) - 1 if self.path_found else 0,
-            "total_distance": self.total_distance,
+            "distance": self.total_distance,
             "visited_nodes": self.visited_nodes,
             "space_complexity": self.max_nodes_in_memory,
             "execution_time": execution_time,
@@ -308,7 +308,7 @@ def bidirectional_iddfs(graph, start, goal, max_depth=float('inf')):
     # Print summary of results for convenience
     if result["path_found"]:
         print(f"Path found: {' -> '.join(map(str, result['path']))}")
-        print(f"Total distance: {result['total_distance']}")
+        print(f"Total distance: {result['distance']}")
         print(f"Path length: {result['path_length']} nodes")
     else:
         print("No path found")

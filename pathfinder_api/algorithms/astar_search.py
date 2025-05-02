@@ -75,7 +75,8 @@ def astar_search(graph, start, goal, heuristic):
     while open_set:
         # Get the node with the lowest f value
         _, _, current_node = heapq.heappop(open_set)
-        open_set_hash.remove(current_node.name)
+        if current_node.name in open_set_hash:
+            open_set_hash.remove(current_node.name)
 
         # Mark as visited
         visited_nodes += 1

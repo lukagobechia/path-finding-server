@@ -124,22 +124,21 @@ def get_graph(graph_id):
 def get_all_graphs():
     """Retrieve all graphs with optional filtering and pagination."""
     try:
-        # Extract and sanitize query parameters
-        page = max(int(request.args.get('page', 1)), 1)
-        limit = max(int(request.args.get('limit', 10)), 1)
+        # Extract query parameters
+        page = int(request.args.get('page', 1))
+        limit = int(request.args.get('limit', 10))
         sort_by = request.args.get('sort_by', 'updated_at')
-        sort_order = request.args.get('sort_order', 'desc').lower()
+        sort_order = request.args.get('sort_order', 'desc')
         filter_name = request.args.get('name')
 
         # Build MongoDB query
         query = {}
         if filter_name:
-            query["name"] = {"$regex": filter_name, "$options": "i"}  # Case-insensitive
+            query["name"] = {"$regex": filter_name, "$options": "i"}  # Case-insensitive filter
 
         skip = (page - 1) * limit
-        sort_direction = DESCENDING if sort_order == 'desc' else ASCENDING
+        sort_direction = DESCENDING if sort_order.lower() == 'desc' else ASCENDING
 
-        # Perform the database query
         cursor = collection.find(query) \
                            .sort(sort_by, sort_direction) \
                            .skip(skip) \
@@ -147,10 +146,9 @@ def get_all_graphs():
 
         graphs = []
         for doc in cursor:
-            doc['id'] = str(doc.pop('_id', ''))  # Safely rename ObjectId
+            doc['id'] = str(doc.pop('_id'))  # Rename and convert ObjectId to string
             graphs.append(doc)
 
-        # Count total documents for pagination
         total_documents = collection.count_documents(query)
         total_pages = (total_documents + limit - 1) // limit
 
@@ -160,11 +158,8 @@ def get_all_graphs():
             "limit": limit,
             "total_documents": total_documents,
             "total_pages": total_pages
-        }), 200
-
+        })
     except Exception as e:
-        # Optional: log full traceback during development
-        print(traceback.format_exc())
         return jsonify({"error": str(e)}), 500
 
 

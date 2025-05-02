@@ -55,7 +55,7 @@ def find_path():
     # Prepare response
     response = {
         "path": result["path"],
-        "distance": result["distance"],
+        "distance": result["path_length"],
         "time_complexity": time_complexity,
         "space_complexity": space_complexity,
         "visited_nodes": result["visited_nodes"],

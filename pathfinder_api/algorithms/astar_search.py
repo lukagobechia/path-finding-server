@@ -1,6 +1,6 @@
 import heapq
 import time
-import math
+from collections import defaultdict
 
 
 class Node:
@@ -8,7 +8,7 @@ class Node:
         self.name = name
         self.parent = parent
         self.g = 0  # Cost from start to current node
-        self.h = 0  # Heuristic (estimated cost from current node to goal)
+        self.h = 0  # Heuristic (estimated cost from current to goal)
         self.f = 0  # Total cost (g + h)
 
     def __eq__(self, other):
@@ -22,7 +22,6 @@ class Node:
 
 
 def reconstruct_path(node):
-    """Reconstruct the path from start to goal."""
     path = []
     current = node
     while current:
@@ -32,105 +31,86 @@ def reconstruct_path(node):
 
 
 def calculate_branching_factor(graph):
-    """Calculate the average branching factor of the graph."""
     total_nodes = len(graph)
     total_edges = sum(len(neighbors) for neighbors in graph.values())
     return total_edges / total_nodes if total_nodes > 0 else 1
 
 
+def check_heuristic_consistency(graph, heuristic, goal):
+    """Check if the heuristic is consistent (monotonic)."""
+    for node in graph:
+        h_node = heuristic.get(node, 0)
+        for neighbor, cost in graph[node].items():
+            h_neighbor = heuristic.get(neighbor, 0)
+            # For consistency: h(n) ≤ c(n,a,n') + h(n')
+            if h_node > cost + h_neighbor and node != goal:
+                return False
+    return True
+
+
 def astar_search(graph, start, goal, heuristic):
-    """
-    A* pathfinding algorithm for finding the shortest path.
-
-    Args:
-        graph: Dictionary of node connections and distances
-        start: Starting node name
-        goal: Goal node name
-        heuristic: Dictionary with estimated distances to goal
-
-    Returns:
-        Dictionary containing:
-        - path: List of nodes in the path
-        - distance: Total distance of the path
-        - visited_nodes: Number of nodes visited during search
-        - space_complexity: Maximum number of nodes in memory
-        - execution_time: Time taken to execute the algorithm
-        - time_complexity: Time complexity analysis
-    """
     start_time = time.time()
 
     # Calculate average branching factor
     avg_branching_factor = calculate_branching_factor(graph)
 
-    # Initialize start and goal nodes
-    start_node = Node(start)
-    goal_node = Node(goal)
+    # Check heuristic consistency (admissibility is a subset of consistency)
+    is_consistent = check_heuristic_consistency(graph, heuristic, goal)
+    if not is_consistent:
+        print("Warning: Heuristic may not be consistent, A* optimality not guaranteed")
 
-    # Set the heuristic for the start node
+    # Initialize nodes
+    start_node = Node(start)
     start_node.h = heuristic.get(start, 0)
     start_node.f = start_node.h
 
-    # Initialize open and closed sets
+    # Priority queue for open set
     open_set = []
-    heapq.heappush(open_set, (start_node.f, id(start_node), start_node))
+    # Use counter for tie-breaking when f-values are equal
+    counter = 0
+    heapq.heappush(open_set, (start_node.f, counter, start_node))
+    counter += 1
 
-    # Keep track of nodes in open set for faster lookup
-    open_set_hash = {start}
+    # Dictionary to track nodes in the open set for quick lookup and updates
+    open_dict = {start: start_node}
 
-    # Keep track of closed nodes
+    # Closed set to track visited nodes
     closed_set = set()
 
     # Metrics
     visited_nodes = 0
-    max_nodes_in_memory = 1  # Start with 1 for the start node
-    expanded_nodes = 0  # Count of nodes where neighbors were explored
+    max_nodes_in_memory = 1
+    expanded_nodes = 0
 
     while open_set:
-        # Get the node with the lowest f value
+        # Get the node with the lowest f-score
         _, _, current_node = heapq.heappop(open_set)
-        if current_node.name in open_set_hash:
-            open_set_hash.remove(current_node.name)
 
-        # Mark as visited
+        # Remove from open dictionary
+        del open_dict[current_node.name]
+
         visited_nodes += 1
 
-        # Add to closed set
-        closed_set.add(current_node.name)
-
-        # If we found the goal
+        # Check if we reached the goal
         if current_node.name == goal:
             path = reconstruct_path(current_node)
             path_length = len(path) - 1
 
-            # Calculate total distance
+            # Calculate total path distance
             total_distance = 0
             for i in range(path_length):
                 total_distance += graph[path[i]][path[i + 1]]
 
             execution_time = time.time() - start_time
 
-            # Calculate time complexity
-            # For A*, the time complexity is O(b^d) in the worst case
-            # where b is the branching factor and d is the depth of the solution
+            # Complexity analysis
             worst_case_complexity = avg_branching_factor ** path_length
-
-            # With a perfect heuristic, A* is O(d)
             best_case_complexity = path_length
-
-            # With a decent heuristic, A* is closer to O(b^(d*ε)) where ε < 1
-            # Let's use the ratio of expanded nodes to estimate the impact of heuristic
             heuristic_effectiveness = expanded_nodes / len(graph) if len(graph) > 0 else 1
             heuristic_adjusted_complexity = avg_branching_factor ** (path_length * heuristic_effectiveness)
-
-            # Comparison with other algorithms:
-            # Dijkstra's time complexity is O(|V|^2) without priority queue, O(|E| + |V|log|V|) with priority queue
-            dijkstra_complexity = len(graph) ** 2  # Simple approximation
-
-            # BFS/DFS time complexity is O(|V| + |E|)
+            dijkstra_complexity = len(graph) * (len(graph) + sum(len(neighbors) for neighbors in graph.values()))
             bfs_complexity = len(graph) + sum(len(neighbors) for neighbors in graph.values())
-
-            # Bidirectional search time complexity is approximately O(b^(d/2))
-            bidirectional_complexity = avg_branching_factor ** (path_length / 2)
+            bidirectional_complexity = 2 * (avg_branching_factor ** (path_length / 2))
 
             time_complexity = {
                 "avg_branching_factor": avg_branching_factor,
@@ -139,10 +119,11 @@ def astar_search(graph, start, goal, heuristic):
                 "worst_case": f"O(b^d) ≈ {worst_case_complexity:.2e}",
                 "best_case": f"O(d) = {best_case_complexity}",
                 "heuristic_adjusted": f"O(b^(d*ε)) ≈ {heuristic_adjusted_complexity:.2e}",
+                "heuristic_consistency": is_consistent,
                 "comparison": {
-                    "dijkstra": f"O(|V|^2) ≈ {dijkstra_complexity:.2e}",
+                    "dijkstra": f"O(|V|log|V| + |E|) ≈ {dijkstra_complexity:.2e}",
                     "bfs": f"O(|V| + |E|) ≈ {bfs_complexity:.2e}",
-                    "bidirectional": f"O(b^(d/2)) ≈ {bidirectional_complexity:.2e}"
+                    "bidirectional": f"O(2*b^(d/2)) ≈ {bidirectional_complexity:.2e}"
                 }
             }
 
@@ -155,48 +136,60 @@ def astar_search(graph, start, goal, heuristic):
                 "time_complexity": time_complexity
             }
 
-        # Generate neighbors
+        # Add to closed set since we're processing this node
+        closed_set.add(current_node.name)
         expanded_nodes += 1
+
+        # Process all neighbors
         for neighbor_name, distance in graph[current_node.name].items():
-            # Skip if neighbor is in closed set
+            # Skip if neighbor is already processed
             if neighbor_name in closed_set:
                 continue
 
-            # Calculate g value for this neighbor
+            # Calculate tentative g score
             g_score = current_node.g + distance
 
-            # Create neighbor node
-            neighbor_node = Node(neighbor_name, current_node)
-            neighbor_node.g = g_score
-            neighbor_node.h = heuristic.get(neighbor_name, 0)
-            neighbor_node.f = neighbor_node.g + neighbor_node.h
+            # Check if neighbor is in open set
+            if neighbor_name in open_dict:
+                # If we already found a better path, skip
+                if g_score >= open_dict[neighbor_name].g:
+                    continue
 
-            # If neighbor is in open set with a better g score, skip
-            if neighbor_name in open_set_hash:
-                # Find the existing node in open_set
-                for i, (_, _, node) in enumerate(open_set):
-                    if node.name == neighbor_name:
-                        if node.g <= g_score:
-                            continue
-                        else:
-                            # Update the node in the open set (remove and add)
-                            del open_set[i]
-                            heapq.heapify(open_set)
-                            break
+                # Found a better path to this neighbor
+                neighbor_node = open_dict[neighbor_name]
+                neighbor_node.g = g_score
+                neighbor_node.parent = current_node
+                neighbor_node.f = g_score + neighbor_node.h
 
-            # Add to open set
-            heapq.heappush(open_set, (neighbor_node.f, id(neighbor_node), neighbor_node))
-            open_set_hash.add(neighbor_name)
+                # We don't need to update the heap because we'll compare f-values
+                # when we pop nodes. The old entry will be skipped when processed
+                # since it won't be in the open_dict anymore
+
+                # Add the updated node back to the heap
+                heapq.heappush(open_set, (neighbor_node.f, counter, neighbor_node))
+                counter += 1
+            else:
+                # Create a new neighbor node
+                neighbor_node = Node(neighbor_name, current_node)
+                neighbor_node.g = g_score
+                neighbor_node.h = heuristic.get(neighbor_name, 0)
+                neighbor_node.f = g_score + neighbor_node.h
+
+                # Add to open set
+                heapq.heappush(open_set, (neighbor_node.f, counter, neighbor_node))
+                counter += 1
+                open_dict[neighbor_name] = neighbor_node
 
             # Update max nodes in memory
             current_nodes_in_memory = len(open_set) + len(closed_set)
             max_nodes_in_memory = max(max_nodes_in_memory, current_nodes_in_memory)
 
-    # If we get here, no path was found
+    # No path found
     execution_time = time.time() - start_time
 
-    # Calculate time complexity for no path case
+    # Calculate complexity for no-path case
     worst_case_complexity = avg_branching_factor ** len(graph)
+    dijkstra_complexity = len(graph) * (len(graph) + sum(len(neighbors) for neighbors in graph.values()))
 
     time_complexity = {
         "avg_branching_factor": avg_branching_factor,
@@ -205,10 +198,11 @@ def astar_search(graph, start, goal, heuristic):
         "worst_case": f"O(b^d) ≈ {worst_case_complexity:.2e}",
         "best_case": "N/A - No path found",
         "heuristic_adjusted": "N/A - No path found",
+        "heuristic_consistency": is_consistent,
         "comparison": {
-            "dijkstra": f"O(|V|^2) ≈ {len(graph) ** 2:.2e}",
+            "dijkstra": f"O(|V|log|V| + |E|) ≈ {dijkstra_complexity:.2e}",
             "bfs": f"O(|V| + |E|) ≈ {len(graph) + sum(len(neighbors) for neighbors in graph.values()):.2e}",
-            "bidirectional": f"O(b^(d/2)) ≈ {avg_branching_factor ** (len(graph) / 2):.2e}"
+            "bidirectional": f"O(2*b^(|V|/2)) ≈ {2 * (avg_branching_factor ** (len(graph) / 2)):.2e}"
         }
     }
 
@@ -220,30 +214,3 @@ def astar_search(graph, start, goal, heuristic):
         "execution_time": execution_time,
         "time_complexity": time_complexity
     }
-
-
-def print_astar_results(result):
-    """Print the results of the A* search in a readable format."""
-    if result["path"]:
-        print(f"Path found: {' -> '.join(map(str, result['path']))}")
-        print(f"Total distance: {result['distance']}")
-        print(f"Path length: {result['time_complexity']['path_length']} nodes")
-    else:
-        print("No path found")
-
-    print(f"\nTime complexity analysis:")
-    print(f"  - Average branching factor (b): {result['time_complexity']['avg_branching_factor']:.2f}")
-    print(f"  - Worst case complexity: {result['time_complexity']['worst_case']}")
-    print(f"  - Best case complexity: {result['time_complexity']['best_case']}")
-    print(f"  - Heuristic-adjusted complexity: {result['time_complexity']['heuristic_adjusted']}")
-
-    print(f"\nComparison with other algorithms:")
-    print(f"  - Dijkstra's: {result['time_complexity']['comparison']['dijkstra']}")
-    print(f"  - BFS: {result['time_complexity']['comparison']['bfs']}")
-    print(f"  - Bidirectional search: {result['time_complexity']['comparison']['bidirectional']}")
-
-    print(f"\nPerformance metrics:")
-    print(f"  - Nodes visited: {result['visited_nodes']}")
-    print(f"  - Nodes expanded: {result['time_complexity']['expanded_nodes']}")
-    print(f"  - Max nodes in memory: {result['space_complexity']}")
-    print(f"  - Execution time: {result['execution_time']:.6f} seconds")

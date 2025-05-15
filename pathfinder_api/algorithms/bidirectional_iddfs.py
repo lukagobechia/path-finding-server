@@ -4,59 +4,45 @@ from collections import defaultdict
 
 class BidirectionalIDDFSAlgorithm:
     def __init__(self):
-        # Path and other metrics will be stored here
         self.path = []
         self.visited_nodes = 0
         self.max_nodes_in_memory = 0
         self.current_nodes_in_memory = 0
         self.path_found = False
-        self.forward_visited = set()  # Track nodes visited from start
-        self.backward_visited = set()  # Track nodes visited from goal
-        self.meeting_point = None  # Node where forward and backward searches meet
-        self.forward_paths = {}  # Maps node -> path from start to node
-        self.backward_paths = {}  # Maps node -> path from node to goal
-        self.total_distance = 0  # Total distance of the path
+        self.forward_visited = set()
+        self.backward_visited = set()
+        self.meeting_point = None
+        self.forward_paths = {}
+        self.backward_paths = {}
+        self.total_distance = 0
 
     def dls_forward(self, graph, current, depth, path, visited):
         """
-        Forward Depth-Limited Search implementation.
-
-        Args:
-            graph: Dictionary representing the graph
-            current: Current node
-            depth: Current depth limit
-            path: Current path being explored
-            visited: Set of visited nodes in current path
-
-        Returns:
-            Boolean: True if a meeting point is found, False otherwise
+        Depth-limited search in the forward direction (from start)
         """
-        # Update metrics
         self.visited_nodes += 1
         self.current_nodes_in_memory = len(visited) + len(self.backward_visited)
         self.max_nodes_in_memory = max(self.max_nodes_in_memory, self.current_nodes_in_memory)
 
-        # Store the path to this node in forward_paths
+        # Store the path to this node
         self.forward_paths[current] = path.copy()
         self.forward_visited.add(current)
 
-        # Check if we found a node that has been visited by backward search
+        # Check if we've met the backward search
         if current in self.backward_visited:
             self.meeting_point = current
             return True
 
-        # If depth limit is reached, stop recursion
+        # If we've reached depth limit, stop exploring
         if depth <= 0:
             return False
 
         # Explore neighbors
-        for neighbor in graph.get(current, []):
+        for neighbor in graph.get(current, {}):
             if neighbor not in visited:
-                # Add to path and visited
                 path.append(neighbor)
                 visited.add(neighbor)
 
-                # Recursive call with reduced depth
                 if self.dls_forward(graph, neighbor, depth - 1, path, visited):
                     return True
 
@@ -68,44 +54,31 @@ class BidirectionalIDDFSAlgorithm:
 
     def dls_backward(self, reversed_graph, current, depth, path, visited):
         """
-        Backward Depth-Limited Search implementation.
-
-        Args:
-            reversed_graph: Dictionary representing the reversed graph
-            current: Current node (starting from goal)
-            depth: Current depth limit
-            path: Current path being explored (from current to goal)
-            visited: Set of visited nodes in current path
-
-        Returns:
-            Boolean: True if a meeting point is found, False otherwise
+        Depth-limited search in the backward direction (from goal)
         """
-        # Update metrics
         self.visited_nodes += 1
         self.current_nodes_in_memory = len(visited) + len(self.forward_visited)
         self.max_nodes_in_memory = max(self.max_nodes_in_memory, self.current_nodes_in_memory)
 
-        # Store the path from this node to goal in backward_paths
+        # Store the path to this node
         self.backward_paths[current] = path.copy()
         self.backward_visited.add(current)
 
-        # Check if we found a node that has been visited by forward search
+        # Check if we've met the forward search
         if current in self.forward_visited:
             self.meeting_point = current
             return True
 
-        # If depth limit is reached, stop recursion
+        # If we've reached depth limit, stop exploring
         if depth <= 0:
             return False
 
-        # Explore neighbors in reversed graph
-        for neighbor in reversed_graph.get(current, []):
+        # Explore neighbors
+        for neighbor in reversed_graph.get(current, {}):
             if neighbor not in visited:
-                # Add to path and visited
                 path.append(neighbor)
                 visited.add(neighbor)
 
-                # Recursive call with reduced depth
                 if self.dls_backward(reversed_graph, neighbor, depth - 1, path, visited):
                     return True
 
@@ -117,44 +90,42 @@ class BidirectionalIDDFSAlgorithm:
 
     def calculate_distance(self, graph, path):
         """
-        Calculate the total distance of a path based on edge weights.
-
-        Args:
-            graph: Dictionary representing the weighted graph
-            path: List of nodes representing the path
-
-        Returns:
-            Float: Total distance of the path
+        Calculate the total distance of a path
         """
+        if not path or len(path) < 2:
+            return 0
+
         total_distance = 0
         for i in range(len(path) - 1):
-            # Check if the edge has a weight; if not, use 1 as default (unweighted graph)
-            if isinstance(graph[path[i]], dict):
-                # If graph uses dict for neighbor weights {neighbor: weight}
-                total_distance += graph[path[i]].get(path[i + 1], 1)
-            elif isinstance(graph[path[i]], list):
-                # If graph uses list for neighbors, assume weight 1 (unweighted)
-                total_distance += 1
+            current = path[i]
+            next_node = path[i + 1]
+
+            # Handle different graph representations
+            if isinstance(graph[current], dict):
+                # Weighted graph
+                if next_node in graph[current]:
+                    total_distance += graph[current][next_node]
+                else:
+                    # This should not happen in a valid path
+                    return float('inf')
+            elif isinstance(graph[current], list):
+                # Unweighted graph
+                if next_node in graph[current]:
+                    total_distance += 1
+                else:
+                    # This should not happen in a valid path
+                    return float('inf')
             else:
-                # Fallback for other graph representations
+                # Unknown graph format
                 total_distance += 1
 
         return total_distance
 
     def bidirectional_iddfs_search(self, graph, start, goal, max_depth):
         """
-        Bidirectional Iterative Deepening Depth-First Search.
-
-        Args:
-            graph: Dictionary representing the graph
-            start: Starting node
-            goal: Target node
-            max_depth: Maximum depth to search
-
-        Returns:
-            Dictionary containing results and metrics
+        Main bidirectional IDDFS search function
         """
-        # Reset metrics
+        # Reset state
         self.visited_nodes = 0
         self.max_nodes_in_memory = 0
         self.path = []
@@ -166,71 +137,100 @@ class BidirectionalIDDFSAlgorithm:
         self.backward_paths = {}
         self.total_distance = 0
 
-        # Create reversed graph for backward search
+        # Validation checks
+        if start not in graph:
+            print(f"Warning: Start node '{start}' not in graph")
+            return self._create_result(graph, max_depth, 0, time.time())
+
+        if goal not in graph:
+            print(f"Warning: Goal node '{goal}' not in graph")
+            return self._create_result(graph, max_depth, 0, time.time())
+
+        if start == goal:
+            self.path = [start]
+            self.path_found = True
+            return self._create_result(graph, 0, 0, time.time())
+
+        # Build reversed graph for backward search
         reversed_graph = self.reverse_graph(graph)
 
         start_time = time.time()
 
-        # Variables to calculate branching factor
+        # Compute branching factor
         total_nodes = len(graph)
-        total_edges = sum(len(neighbors) if isinstance(neighbors, list) else len(neighbors.keys())
-                          for neighbors in graph.values())
+        total_edges = 0
+        for node, neighbors in graph.items():
+            if isinstance(neighbors, dict):
+                total_edges += len(neighbors)
+            elif isinstance(neighbors, list):
+                total_edges += len(neighbors)
+
         avg_branching_factor = total_edges / total_nodes if total_nodes > 0 else 1
 
-        # Iteratively increase depth
+        # Perform IDDFS
         final_depth = 0
         for depth in range(max_depth + 1):
             final_depth = depth
-            # Initialize paths and visited sets for this iteration
-            forward_path = [start]
-            backward_path = [goal]
-            forward_visited = {start}
-            backward_visited = {goal}
 
-            # Perform one step of forward search
-            if self.dls_forward(graph, start, depth, forward_path, forward_visited):
+            # Reset for new depth iteration
+            self.forward_visited = set([start])
+            self.backward_visited = set([goal])
+            self.forward_paths = {start: [start]}
+            self.backward_paths = {goal: [goal]}
+
+            # Perform limited DFS from both directions
+            forward_result = self.dls_forward(graph, start, depth, [start], {start})
+            if forward_result:
                 self.path_found = True
                 break
 
-            # Perform one step of backward search
-            if self.dls_backward(reversed_graph, goal, depth, backward_path, backward_visited):
+            backward_result = self.dls_backward(reversed_graph, goal, depth, [goal], {goal})
+            if backward_result:
                 self.path_found = True
                 break
 
-        # Construct the complete path if a meeting point was found
-        if self.path_found:
-            # Get path from start to meeting point
+        # Construct full path if found
+        if self.path_found and self.meeting_point:
             forward_half = self.forward_paths[self.meeting_point]
-
-            # Get path from meeting point to goal
             backward_half = self.backward_paths[self.meeting_point]
-            backward_half.reverse()  # Reverse to get correct order
+            backward_half.reverse()
 
-            # Combine paths (removing duplicate meeting point)
+            # Combine paths, avoiding duplicate meeting point
             self.path = forward_half + backward_half[1:]
 
-            # Calculate the total distance
+            # Calculate path distance
             self.total_distance = self.calculate_distance(graph, self.path)
 
+        # Calculate execution time
         execution_time = time.time() - start_time
 
-        # Calculate theoretical time complexity
-        # For standard IDDFS: O(b^d)
+        # Create and return result
+        return self._create_result(graph, final_depth, execution_time, start_time)
+
+    def _create_result(self, graph, final_depth, execution_time, start_time):
+        """Helper method to create consistent result dictionary"""
+        total_nodes = len(graph)
+        total_edges = 0
+        for node, neighbors in graph.items():
+            if isinstance(neighbors, dict):
+                total_edges += len(neighbors)
+            elif isinstance(neighbors, list):
+                total_edges += len(neighbors)
+
+        avg_branching_factor = total_edges / total_nodes if total_nodes > 0 else 1
+
+        # Calculate complexity metrics
         std_complexity = avg_branching_factor ** final_depth if final_depth > 0 else 1
 
-        # For bidirectional IDDFS: O(b^(d/2) + b^(d/2)) ≈ O(b^(d/2))
         if self.path_found and len(self.path) > 1:
-            # Use the actual path length to calculate the actual depth
             actual_depth = len(self.path) - 1
             bi_complexity = avg_branching_factor ** (actual_depth / 2)
         else:
-            # Fallback if no path found
             bi_complexity = avg_branching_factor ** (final_depth / 2)
 
-        # Calculate complexity improvement ratio
         improvement_ratio = std_complexity / bi_complexity if bi_complexity > 0 else float('inf')
 
-        # Prepare results
+        # Create result dictionary
         result = {
             "path": self.path,
             "path_length": len(self.path) - 1 if self.path_found else 0,
@@ -254,58 +254,45 @@ class BidirectionalIDDFSAlgorithm:
 
     def reverse_graph(self, graph):
         """
-        Creates a reversed version of the graph where all edges point in the opposite direction.
-
-        Args:
-            graph: Dictionary representing the original graph
-
-        Returns:
-            Dictionary representing the reversed graph
+        Create a reversed version of the graph where all edges point in the opposite direction
         """
-        reversed_graph = defaultdict(list)
+        reversed_graph = defaultdict(dict)
 
-        # Handle different graph representations
         for node, neighbors in graph.items():
+            # Ensure the node exists in the reversed graph
+            if node not in reversed_graph:
+                reversed_graph[node] = {}
+
             if isinstance(neighbors, dict):
-                # If graph uses dict for neighbor weights {neighbor: weight}
+                # Weighted graph
                 for neighbor, weight in neighbors.items():
                     if neighbor not in reversed_graph:
                         reversed_graph[neighbor] = {}
                     reversed_graph[neighbor][node] = weight
             elif isinstance(neighbors, list):
-                # If graph uses list for neighbors
+                # Unweighted graph represented as lists
                 for neighbor in neighbors:
                     if neighbor not in reversed_graph:
-                        reversed_graph[neighbor] = []
-                    reversed_graph[neighbor].append(node)
+                        reversed_graph[neighbor] = {}
+                    reversed_graph[neighbor][node] = 1  # Default weight of 1 for unweighted
 
-        return reversed_graph
+        return dict(reversed_graph)
 
 
 def bidirectional_iddfs(graph, start, goal, max_depth=float('inf')):
     """
-    Wrapper function for Bidirectional IDDFS algorithm for graphs.
-
-    Args:
-        graph: Dictionary of node connections (adjacency list or weighted graph)
-        start: Starting node name
-        goal: Goal node name
-        max_depth: Maximum depth to search (default: infinity)
-
-    Returns:
-        Dictionary containing path, distance, time complexity, and other metrics
+    Run bidirectional IDDFS and print results
     """
-    # Create an instance of the algorithm
     algorithm = BidirectionalIDDFSAlgorithm()
 
-    # Set a reasonable max_depth if not specified
+    # Use graph size as default max_depth if not specified
     if max_depth == float('inf'):
-        max_depth = len(graph)  # One depth level per node should be enough in bidirectional search
+        max_depth = len(graph)
 
-    # Run the algorithm
+        # Run the search
     result = algorithm.bidirectional_iddfs_search(graph, start, goal, max_depth)
 
-    # Print summary of results for convenience
+    # Print results
     if result["path_found"]:
         print(f"Path found: {' -> '.join(map(str, result['path']))}")
         print(f"Total distance: {result['distance']}")
